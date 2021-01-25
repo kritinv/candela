@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'Custom Widgets/NavBar.dart';
 import 'Custom Widgets/RatingBar.dart';
 import 'package:overlay_screen/overlay_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'main.dart';
 
 class ProfilePage extends StatefulWidget {
   final String imageURL;
@@ -11,6 +13,7 @@ class ProfilePage extends StatefulWidget {
   final RatingBar ratingBar;
   final double rating;
   final Color color;
+  final String id;
 
   ProfilePage(
       {@required this.imageURL,
@@ -19,125 +22,323 @@ class ProfilePage extends StatefulWidget {
       @required this.headline,
       @required this.ratingBar,
       @required this.rating,
-      @required this.color});
+      @required this.color,
+      @required this.id});
 
   static const Color _themePrimary = Color(0xFFDC143C);
   static const Color _themeLight = Colors.white;
+
   @override
   _ProfilePageState createState() => _ProfilePageState();
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  List selectedTimeSlots = [];
+
+  void updateSelectedTimeSlots({how, value}) {
+    if (how == 'add') {
+      setState(() {
+        selectedTimeSlots.add(value);
+      });
+    } else {
+      setState(() {
+        selectedTimeSlots.remove(value);
+      });
+    }
+    print(selectedTimeSlots);
+  }
+
+  Future<List> downloadMeetings() async {
+    List timeSlotsTime;
+    List<Widget> timeSlotsWidget = [];
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.id)
+        .get()
+        .then((DocumentSnapshot documentSnapshot) {
+      if (documentSnapshot.exists) {
+        timeSlotsTime = documentSnapshot.data()["meeting"];
+      }
+    });
+    for (int i = 0; i < timeSlotsTime.length; i += 2) {
+      timeSlotsWidget.add(
+        TimeSlot(
+          timeSlotOne: timeSlotsTime[i],
+          timeSlotTwo:
+              ((i + 1) <= timeSlotsTime.length) ? timeSlotsTime[i + 1] : null,
+          updateSelectedTimeSlots: updateSelectedTimeSlots,
+        ),
+      );
+    }
+    return timeSlotsWidget;
+  }
+
   @override
   Widget build(BuildContext context) {
-    double height = MediaQuery.of(context).size.height;
-    double width = MediaQuery.of(context).size.width;
-    OverlayScreen().saveScreens({
-      'TimeSlots': CustomOverlayScreen(
-        backgroundColor: Colors.transparent,
-        content: Dialog(
-          child: Container(
-            width: width * 3 / 2,
-            height: height * 3 / 2,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                FlatButton(
-                  child: Text("Confirm Meeting"),
-                  onPressed: () {
-                    OverlayScreen().pop();
-                  },
-                )
-              ],
-            ),
-          ),
-        ),
-      ),
-    });
-
-    // profile page content part
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: ProfilePage._themePrimary,
-        elevation: 0,
-      ),
-      body: Column(crossAxisAlignment: CrossAxisAlignment.center, children: <
-          Widget>[
-        Expanded(
-          child: Container(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: <Widget>[
-                SizedBox(height: 40),
-                CircleAvatar(
-                  backgroundImage: NetworkImage(widget.imageURL),
-                  radius: 80,
-                ),
-                SizedBox(height: 15),
-                Text("@username", style: TextStyle(color: Colors.grey[700])),
-                SizedBox(height: 15),
-                Text(widget.firstName + " " + widget.lastName,
-                    style: TextStyle(fontSize: 25)),
-                SizedBox(height: 10),
-                Text(widget.headline,
-                    style: TextStyle(fontSize: 15, color: Colors.grey[700])),
-                SizedBox(height: 15),
-                Container(
-                  margin: EdgeInsets.symmetric(horizontal: 50),
-                  child: Text(
-                      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis lacinia volutpat urna, non aliquam mi dictum vel. Vestibulum pretium id lacus at lobortis.",
-                      style: TextStyle(fontSize: 15),
-                      textAlign: TextAlign.left),
-                ),
-                SizedBox(height: 15),
-                Divider(thickness: 2, color: Colors.red[300]),
-                SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Text(
-                      "Rating:",
-                      style: TextStyle(fontSize: 20),
-                    ),
-                    SizedBox(width: 5),
-                    widget.ratingBar,
-                    SizedBox(width: 5),
-                    CircleAvatar(
-                      backgroundColor: widget.color,
-                      radius: 30,
-                      child: CircleAvatar(
-                          radius: 25,
-                          backgroundColor: Colors.white,
-                          child: Text(widget.rating.toString(),
-                              style: TextStyle(color: Colors.black))),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 30),
-                FlatButton(
-                  onPressed: () {
-                    OverlayScreen().show(
-                      context,
-                      identifier: "TimeSlots",
-                    );
-                  },
+    return FutureBuilder<List>(
+        future:
+            downloadMeetings(), // a previously-obtained Future<String> or null
+        builder: (BuildContext context, AsyncSnapshot<List> list) {
+          if (list.hasData) {
+            double height = MediaQuery.of(context).size.height;
+            double width = MediaQuery.of(context).size.width;
+            OverlayScreen().saveScreens({
+              'TimeSlots': CustomOverlayScreen(
+                backgroundColor: Colors.transparent,
+                content: Dialog(
                   child: Container(
-                    width: double.infinity,
-                    height: 40,
-                    margin: EdgeInsets.symmetric(horizontal: 50),
-                    child: Center(
-                      child: Text(
-                        "Meetings (21)",
-                        style: TextStyle(color: ProfilePage._themeLight),
-                      ),
+                    width: width * 3 / 2,
+                    height: height * 3 / 2,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Column(children: [
+                          Container(
+                              margin: EdgeInsets.only(right: 20),
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                  icon: Icon(Icons.close),
+                                  onPressed: () {
+                                    OverlayScreen().pop();
+                                  })),
+                          SizedBox(height: 10),
+                          Container(
+                            height: height * 2 / 3,
+                            child: ListView(children: list.data),
+                          ),
+                        ]),
+                        Container(
+                          margin: EdgeInsets.only(bottom: 10),
+                          width: width * 2 / 3,
+                          height: 50,
+                          child: FlatButton(
+                            color: Colors.orange[300],
+                            child: Text("Confirm Meeting Times"),
+                            onPressed: () async {
+                              await FirebaseFirestore.instance
+                                  .collection('user')
+                                  .doc(currentUser)
+                                  .update({
+                                ('meeting.' + widget.id): selectedTimeSlots
+                              });
+                              OverlayScreen().pop();
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                    color: ProfilePage._themePrimary,
                   ),
                 ),
-              ])),
-        ),
-        NavBar(),
-      ]),
+              ),
+            });
+
+            // profile page content part
+            return Scaffold(
+              appBar: AppBar(
+                backgroundColor: ProfilePage._themePrimary,
+                elevation: 0,
+              ),
+              body: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    Expanded(
+                      child: Container(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: <Widget>[
+                            SizedBox(height: 40),
+                            CircleAvatar(
+                              backgroundImage: NetworkImage(widget.imageURL),
+                              radius: 80,
+                            ),
+                            SizedBox(height: 15),
+                            Text("@username",
+                                style: TextStyle(color: Colors.grey[700])),
+                            SizedBox(height: 15),
+                            Text(widget.firstName + " " + widget.lastName,
+                                style: TextStyle(fontSize: 25)),
+                            SizedBox(height: 10),
+                            Text(widget.headline,
+                                style: TextStyle(
+                                    fontSize: 15, color: Colors.grey[700])),
+                            SizedBox(height: 15),
+                            Container(
+                              margin: EdgeInsets.symmetric(horizontal: 50),
+                              child: Text(
+                                  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis lacinia volutpat urna, non aliquam mi dictum vel. Vestibulum pretium id lacus at lobortis.",
+                                  style: TextStyle(fontSize: 15),
+                                  textAlign: TextAlign.left),
+                            ),
+                            SizedBox(height: 30),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                Text(
+                                  "Rating:",
+                                  style: TextStyle(fontSize: 20),
+                                ),
+                                SizedBox(width: 5),
+                                widget.ratingBar,
+                                SizedBox(width: 5),
+                                CircleAvatar(
+                                  backgroundColor: widget.color,
+                                  radius: 30,
+                                  child: CircleAvatar(
+                                      radius: 25,
+                                      backgroundColor: Colors.white,
+                                      child: Text(widget.rating.toString(),
+                                          style:
+                                              TextStyle(color: Colors.black))),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 30),
+                            FlatButton(
+                              onPressed: () {
+                                OverlayScreen().show(
+                                  context,
+                                  identifier: "TimeSlots",
+                                );
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                height: 40,
+                                margin: EdgeInsets.symmetric(horizontal: 50),
+                                child: Center(
+                                  child: Text(
+                                    "Meetings (21)",
+                                    style: TextStyle(
+                                        color: ProfilePage._themeLight),
+                                  ),
+                                ),
+                                color: ProfilePage._themePrimary,
+                              ),
+                            ),
+                          ])),
+                    ),
+                    NavBar(),
+                  ]),
+            );
+          } else if (list.hasError) {
+            return Text('error');
+          } else {
+            return Container();
+          }
+        });
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// CUSTOM WIDGET TIME SLOT
+
+class TimeSlot extends StatefulWidget {
+  final String timeSlotOne;
+  final String timeSlotTwo;
+  final Function updateSelectedTimeSlots;
+  TimeSlot({this.timeSlotOne, this.timeSlotTwo, this.updateSelectedTimeSlots});
+
+  @override
+  _TimeSlotState createState() => _TimeSlotState();
+}
+
+class _TimeSlotState extends State<TimeSlot> {
+  bool selectedStateOne = false;
+  bool selectedStateTwo = false;
+  static const Color _themePrimary = Color(0xFFDC143C);
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.all(10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: <Widget>[
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                if (selectedStateOne == true) {
+                  setState(() {
+                    selectedStateOne = false;
+                    widget.updateSelectedTimeSlots(
+                        how: 'remove', value: widget.timeSlotOne);
+                  });
+                } else {
+                  selectedStateOne = true;
+                  widget.updateSelectedTimeSlots(
+                      how: 'add', value: widget.timeSlotOne);
+                }
+              });
+            },
+            child: Container(
+              height: 50,
+              width: 130,
+              decoration: BoxDecoration(
+                color: _themePrimary,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: (selectedStateOne)
+                      ? Colors.orange[300]
+                      : Colors.transparent,
+                  width: 5,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  widget.timeSlotOne,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          (widget.timeSlotTwo != null)
+              ? GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      if (selectedStateTwo == true) {
+                        setState(() {
+                          selectedStateTwo = false;
+                          widget.updateSelectedTimeSlots(
+                              how: 'remove', value: widget.timeSlotTwo);
+                        });
+                      } else {
+                        selectedStateTwo = true;
+                        widget.updateSelectedTimeSlots(
+                            how: 'add', value: widget.timeSlotTwo);
+                      }
+                    });
+                  },
+                  child: Container(
+                    height: 50,
+                    width: 130,
+                    decoration: BoxDecoration(
+                      color: _themePrimary,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: (selectedStateTwo)
+                            ? Colors.orange[300]
+                            : Colors.transparent,
+                        width: 5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        widget.timeSlotTwo,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : Container(
+                  width: 130,
+                  height: 50,
+                )
+        ],
+      ),
     );
   }
 }

@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'Custom Widgets/NavBar.dart';
 import 'Custom Widgets/RatingBar.dart';
-import 'SearchScreen.dart';
 import 'main.dart';
 import 'package:bq_version/main.dart';
+import 'package:bq_version/ProfilePage.dart';
+import 'package:overlay_screen/overlay_screen.dart';
 
 ////////////////////////////////////////////////////////////////////////////////
 // HOME PAGE
@@ -16,8 +17,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const Color _themePrimary = Color(0xFFDC143C);
-  static const Color _themeLight = Colors.white; // theme primary
-// theme primary
+  static const Color _themeLight = Colors.white;
+  double height;
+  double width;
+
   Widget body = HomeMeeting();
   bool searchBarPresent = false;
   Color meetingColor = _themeLight;
@@ -25,11 +28,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Color favoriteColor = _themePrimary;
   Color favoriteTextColor = _themeLight;
 
-  toggleMeeting() {
+  toggleMeeting({width, height}) {
     if (body is! HomeMeeting) {
       print('what');
       setState(() {
-        body = HomeMeeting();
+        body = HomeMeeting(width: width, height: height);
         meetingColor = _themeLight;
         meetingTextColor = _themePrimary;
         favoriteColor = _themePrimary;
@@ -52,6 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    height = MediaQuery.of(context).size.height;
+    width = MediaQuery.of(context).size.width;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _themePrimary,
@@ -68,7 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(children: <Widget>[
                   SizedBox(width: 20),
                   GestureDetector(
-                    onTap: toggleMeeting,
+                    onTap: () {
+                      toggleMeeting(width: width, height: height);
+                    },
                     child: Container(
                       height: 25,
                       width: 100,
@@ -86,7 +94,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   SizedBox(width: 10),
                   GestureDetector(
-                    onTap: toggleFavorite,
+                    onTap: () {
+                      toggleFavorite();
+                    },
                     child: Container(
                       height: 25,
                       width: 100,
@@ -113,35 +123,552 @@ class _HomeScreenState extends State<HomeScreen> {
 ////////////////////////////////////////////////////////////////////////////////
 // Home Meeting Body
 
-class HomeMeeting extends StatelessWidget {
+class HomeMeeting extends StatefulWidget {
+  final double width;
+  final double height;
+  const HomeMeeting({this.width, this.height});
+
+  @override
+  _HomeMeetingState createState() => _HomeMeetingState();
+}
+
+class _HomeMeetingState extends State<HomeMeeting> {
+  // download mentor meetings data
+  Future<List<Widget>> downloadMeeting() async {
+    List<Widget> meetingWidget = [];
+    Map meetingMap;
+    await FirebaseFirestore.instance
+        .collection('user')
+        .doc(currentUser)
+        .get()
+        .then((DocumentSnapshot documentSnapshot) {
+      if (documentSnapshot.exists) {
+        meetingMap = documentSnapshot.data()["meeting"];
+      }
+    });
+
+    print(meetingMap);
+    List keys = meetingMap.keys.toList();
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .where("id", whereIn: keys)
+        .get()
+        .then((QuerySnapshot querySnapshot) {
+      querySnapshot.docs.forEach((doc) {
+        List meetingTimes = meetingMap[doc["id"]];
+        meetingTimes.sort();
+        meetingWidget.add(
+          MentorExpandableCard(
+              firstName: doc["first_name"],
+              lastName: doc["last_name"],
+              imageURL: doc['image_url'],
+              rating: double.parse(doc['rating']),
+              headline: doc['headline'],
+              meetingTimes: meetingTimes,
+              totalMeetingTimes: doc["meeting"],
+              id: doc.id,
+              refresh: refresh,
+              width: widget.width,
+              height: widget.height),
+        );
+      });
+    });
+    return meetingWidget;
+  }
+
+  //refresh
+  void refresh() {
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    CollectionReference users = FirebaseFirestore.instance.collection('users');
-    return StreamBuilder<QuerySnapshot>(
-      stream: users.snapshots(),
-      builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
-        if (snapshot.hasError) {
-          print(snapshot.hasError);
-          return Container();
+    return FutureBuilder<List<Widget>>(
+      future: downloadMeeting(),
+      builder: (BuildContext context, AsyncSnapshot<List<Widget>> list) {
+        if (list.hasError) {
+          print(list.hasError);
+          return Center(child: Text('No Upcoming Meetings'));
         }
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          print(snapshot.connectionState);
+        if (list.connectionState == ConnectionState.waiting) {
+          print(list.connectionState);
           return Container();
         }
-
-        return ListView(
-          children: snapshot.data.docs.map((DocumentSnapshot document) {
-            return MentorExpandableCard(
-              firstName: document.data()['first_name'],
-              lastName: document.data()['last_name'],
-              rating: double.parse(document.data()['rating']),
-              headline: document.data()['headline'],
-              imageURL: document.data()['image_url'],
-            );
-          }).toList(),
-        );
+        print(list.data);
+        return ListView(children: list.data);
       },
+    );
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// HOME SCREEN APPOINTMENT CARD
+
+class MentorExpandableCard extends StatefulWidget {
+  final String imageURL;
+  final String firstName;
+  final String lastName;
+  final double rating;
+  final String headline;
+  final List meetingTimes;
+  final List totalMeetingTimes;
+  final String id;
+  final Function refresh;
+  final double height;
+  final double width;
+
+  const MentorExpandableCard({
+    this.imageURL,
+    this.firstName,
+    this.lastName,
+    this.rating,
+    this.headline,
+    this.meetingTimes,
+    this.totalMeetingTimes,
+    this.id,
+    this.refresh,
+    this.height,
+    this.width,
+  });
+
+  @override
+  _MentorExpandableCardState createState() => _MentorExpandableCardState();
+}
+
+class _MentorExpandableCardState extends State<MentorExpandableCard> {
+  List<String> selectedTimeSlots = [];
+  List<Widget> timeBoxes = [];
+  bool displayCancel = false;
+
+  // initialize state
+  @override
+  void initState() {
+    int length = widget.meetingTimes.length;
+    for (int i = 0; i < length; i += 3) {
+      timeBoxes.add(
+        TimeRow(
+            timeOne: widget.meetingTimes[i],
+            timeTwo: (i + 1 < length) ? widget.meetingTimes[i + 1] : null,
+            timeThree: (i + 2 < length) ? widget.meetingTimes[i + 2] : null,
+            updateSelectedTimeSlots: updateSelectedTimeSlots,
+            id: widget.id),
+      );
+    }
+    super.initState();
+  }
+
+  // void cancel Appointment
+  void cancelTime() async {
+    widget.meetingTimes
+        .removeWhere((element) => selectedTimeSlots.contains(element));
+
+    if (widget.meetingTimes.isEmpty) {
+      await FirebaseFirestore.instance
+          .collection('user')
+          .doc(currentUser)
+          .update({('meeting.' + widget.id): FieldValue.delete()});
+      timeBoxes = [];
+      widget.refresh();
+    } else {
+      await FirebaseFirestore.instance
+          .collection('user')
+          .doc(currentUser)
+          .update({
+        ('meeting.' + widget.id): FieldValue.arrayRemove(selectedTimeSlots)
+      });
+      timeBoxes = [];
+      int length = widget.meetingTimes.length;
+      for (int i = 0; i < length; i += 3) {
+        timeBoxes.add(
+          TimeRow(
+              timeOne: widget.meetingTimes[i],
+              timeTwo: (i + 1 < length) ? widget.meetingTimes[i + 1] : null,
+              timeThree: (i + 2 < length) ? widget.meetingTimes[i + 2] : null,
+              updateSelectedTimeSlots: updateSelectedTimeSlots,
+              id: widget.id),
+        );
+      }
+      setState(() {
+        selectedTimeSlots = [];
+        displayCancel = false;
+      });
+    }
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  List selectedNewTimeSlots = [];
+
+  // add appointment
+  void addAppointment({context}) {
+    OverlayScreen().show(
+      context,
+      identifier: "TimeSlots",
+    );
+  }
+
+  void updateNewSelectedTimeSlots({how, value}) {
+    if (how == 'add') {
+      setState(() {
+        selectedTimeSlots.add(value);
+      });
+    } else {
+      setState(() {
+        selectedTimeSlots.remove(value);
+      });
+    }
+    print(selectedTimeSlots);
+  }
+
+  Future<List<Widget>> downloadMeetings() async {
+    List timeSlotsTime;
+    List<Widget> timeSlotsWidget = [];
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.id)
+        .get()
+        .then((DocumentSnapshot documentSnapshot) {
+      if (documentSnapshot.exists) {
+        timeSlotsTime = documentSnapshot.data()["meeting"];
+      }
+    });
+    for (int i = 0; i < timeSlotsTime.length; i += 2) {
+      timeSlotsWidget.add(
+        TimeSlot(
+          timeSlotOne: timeSlotsTime[i],
+          timeSlotTwo:
+              ((i + 1) <= timeSlotsTime.length) ? timeSlotsTime[i + 1] : null,
+          updateSelectedTimeSlots: updateNewSelectedTimeSlots,
+        ),
+      );
+    }
+    return timeSlotsWidget;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  // update selected time slots
+  void updateSelectedTimeSlots({how, id, value}) {
+    if (how == 'add') {
+      selectedTimeSlots.add(value);
+    } else {
+      selectedTimeSlots.remove(value);
+    }
+    print(selectedTimeSlots);
+    if (selectedTimeSlots.isNotEmpty) {
+      setState(() {
+        displayCancel = true;
+      });
+    } else {
+      setState(() {
+        displayCancel = false;
+      });
+    }
+  }
+
+  bool expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List>(
+        future:
+            downloadMeetings(), // a previously-obtained Future<String> or null
+        builder: (BuildContext context, AsyncSnapshot<List> list) {
+          if (list.hasData) {
+            Color color;
+            if (widget.rating <= 1) {
+              color = Colors.red[200];
+            } else if (widget.rating <= 2) {
+              color = Colors.orange[200];
+            } else if (widget.rating <= 3) {
+              color = Colors.yellow[200];
+            } else if (widget.rating <= 4) {
+              color = Colors.green[200];
+            } else {
+              color = Colors.purple[200];
+            }
+
+            double height = MediaQuery.of(context).size.height;
+            double width = MediaQuery.of(context).size.width;
+
+            OverlayScreen().saveScreens({
+              'TimeSlots': CustomOverlayScreen(
+                backgroundColor: Colors.transparent,
+                content: Dialog(
+                  child: Container(
+                    width: width * 3 / 2,
+                    height: height * 3 / 2,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Column(children: [
+                          Container(
+                              margin: EdgeInsets.only(right: 20),
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                  icon: Icon(Icons.close),
+                                  onPressed: () {
+                                    OverlayScreen().pop();
+                                  })),
+                          SizedBox(height: 10),
+                          Container(
+                            height: height * 2 / 3,
+                            child: ListView(children: list.data),
+                          ),
+                        ]),
+                        Container(
+                          margin: EdgeInsets.only(bottom: 10),
+                          width: width * 2 / 3,
+                          height: 50,
+                          child: FlatButton(
+                            color: Colors.orange[300],
+                            child: Text("Confirm Meeting Times"),
+                            onPressed: () async {
+                              await FirebaseFirestore.instance
+                                  .collection('user')
+                                  .doc(currentUser)
+                                  .update({
+                                ('meeting.' + widget.id): selectedNewTimeSlots
+                              });
+                              widget.refresh();
+                              OverlayScreen().pop();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            });
+
+            return ExpansionPanelList(
+              elevation: 0, // 1st add this line
+              expansionCallback: (int index, bool isExpanded) {
+                if (isExpanded == true) {
+                  setState(() {
+                    expanded = false;
+                  });
+                } else {
+                  setState(() {
+                    expanded = true;
+                  });
+                }
+              },
+              children: [
+                ExpansionPanel(
+                  headerBuilder: (BuildContext context, bool isExpanded) {
+                    return ListTile(
+                      title: Container(
+                          margin: EdgeInsets.symmetric(vertical: 10),
+                          height: 100,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: <Widget>[
+                              CircleAvatar(
+                                  backgroundImage:
+                                      NetworkImage(widget.imageURL),
+                                  radius: 40),
+                              SizedBox(width: 20),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    widget.firstName + " " + widget.lastName,
+                                    style: TextStyle(
+                                        fontSize: 20, fontFamily: "OpenSans"),
+                                  ),
+                                  SizedBox(height: 10),
+                                  RatingBar(
+                                      rating: widget.rating, color: color),
+                                  SizedBox(height: 10),
+                                  Text(widget.headline,
+                                      style: TextStyle(
+                                          fontSize: 12, fontFamily: "OpenSans"))
+                                ],
+                              ),
+                            ],
+                          )),
+                    );
+                  },
+                  body: ListTile(
+                    contentPadding: EdgeInsets.only(bottom: 10),
+                    title: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            addAppointment(context: context);
+                          },
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: 160,
+                              height: 30,
+                              margin: EdgeInsets.only(left: 30),
+                              child: Center(
+                                child: Text(
+                                  "Add Appointments",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              decoration: BoxDecoration(
+                                  color: Colors.orange[300],
+                                  borderRadius: BorderRadius.circular(5)),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 5),
+                        Column(children: timeBoxes),
+                        (displayCancel)
+                            ? Column(children: [
+                                SizedBox(height: 10),
+                                Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      GestureDetector(
+                                        onTap: cancelTime,
+                                        child: Container(
+                                          width: 80,
+                                          height: 25,
+                                          child: Center(
+                                            child: Text(
+                                              "Cancel",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          decoration: BoxDecoration(
+                                              color: Color(0xFFDC143C),
+                                              borderRadius:
+                                                  BorderRadius.circular(5)),
+                                        ),
+                                      ),
+                                    ]),
+                              ])
+                            : Container(height: 0, width: 0),
+                        SizedBox(height: 10),
+                      ],
+                    ),
+                  ),
+                  isExpanded: expanded,
+                ),
+              ],
+            );
+          } else if (list.hasError) {
+            return Text('error');
+          } else {
+            return Container();
+          }
+        });
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// CUSTOM WIDGET FOR DISPLAYING TIME SLOTS IN MEETING BOX
+
+class TimeRow extends StatelessWidget {
+  final String timeOne;
+  final String timeTwo;
+  final String timeThree;
+  final Function updateSelectedTimeSlots;
+  final String id;
+  TimeRow(
+      {this.timeOne,
+      this.timeTwo,
+      this.timeThree,
+      this.updateSelectedTimeSlots,
+      this.id});
+
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(top: 10, bottom: 10, left: 25),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: <Widget>[
+          TimeBox(
+            time: timeOne,
+            updateSelectedTimeSlots: updateSelectedTimeSlots,
+            id: id,
+          ),
+          (timeTwo != null)
+              ? TimeBox(
+                  time: timeTwo,
+                  updateSelectedTimeSlots: updateSelectedTimeSlots,
+                  id: id,
+                )
+              : Container(width: 100, height: 30),
+          (timeThree != null)
+              ? TimeBox(
+                  time: timeThree,
+                  updateSelectedTimeSlots: updateSelectedTimeSlots,
+                  id: id,
+                )
+              : Container(width: 100, height: 30),
+        ],
+      ),
+    );
+  }
+}
+
+class TimeBox extends StatefulWidget {
+  final Function updateSelectedTimeSlots;
+  final String time;
+  final String id;
+  TimeBox({this.time, this.updateSelectedTimeSlots, this.id});
+
+  @override
+  _TimeBoxState createState() => _TimeBoxState();
+}
+
+class _TimeBoxState extends State<TimeBox> {
+  bool selected = false;
+
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        if (selected == false) {
+          setState(() {
+            selected = true;
+          });
+          widget.updateSelectedTimeSlots(
+              how: "add", value: widget.time, id: widget.id);
+        } else {
+          setState(() {
+            selected = false;
+          });
+          widget.updateSelectedTimeSlots(
+              how: "remove", value: widget.time, id: widget.id);
+        }
+      },
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 5),
+        width: 100,
+        height: 30,
+        child: Center(
+          child: Text(
+            widget.time,
+            style: TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.red[300],
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+            color: (selected) ? Colors.orange[300] : Colors.transparent,
+            width: 3,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -217,104 +744,6 @@ class _HomeFavoriteState extends State<HomeFavorite> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// HOME SCREEN APPOINTMENT CARD
-
-class MentorExpandableCard extends StatefulWidget {
-  final String imageURL;
-  final String firstName;
-  final String lastName;
-  final double rating;
-  final String headline;
-  const MentorExpandableCard(
-      {this.imageURL,
-      this.firstName,
-      this.lastName,
-      this.rating,
-      this.headline});
-
-  @override
-  _MentorExpandableCardState createState() => _MentorExpandableCardState();
-}
-
-class _MentorExpandableCardState extends State<MentorExpandableCard> {
-  bool expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    if (widget.rating <= 1) {
-      color = Colors.red[200];
-    } else if (widget.rating <= 2) {
-      color = Colors.orange[200];
-    } else if (widget.rating <= 3) {
-      color = Colors.yellow[200];
-    } else if (widget.rating <= 4) {
-      color = Colors.green[200];
-    } else {
-      color = Colors.purple[200];
-    }
-
-    return ExpansionPanelList(
-      elevation: 0, // 1st add this line
-      expansionCallback: (int index, bool isExpanded) {
-        if (isExpanded == true) {
-          setState(() {
-            expanded = false;
-          });
-        } else {
-          setState(() {
-            expanded = true;
-          });
-        }
-      },
-      children: [
-        ExpansionPanel(
-          headerBuilder: (BuildContext context, bool isExpanded) {
-            return ListTile(
-              title: Container(
-                  margin: EdgeInsets.symmetric(vertical: 20),
-                  height: 100,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: <Widget>[
-                      CircleAvatar(
-                          backgroundImage: NetworkImage(widget.imageURL),
-                          radius: 40),
-                      SizedBox(width: 20),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            widget.firstName + " " + widget.lastName,
-                            style:
-                                TextStyle(fontSize: 20, fontFamily: "OpenSans"),
-                          ),
-                          SizedBox(height: 10),
-                          RatingBar(rating: widget.rating, color: color),
-                          SizedBox(height: 10),
-                          Text(widget.headline,
-                              style: TextStyle(
-                                  fontSize: 12, fontFamily: "OpenSans"))
-                        ],
-                      ),
-                    ],
-                  )),
-            );
-          },
-          body: ListTile(
-            title: Text('Item 2 child'),
-            subtitle: Text('Details goes here'),
-          ),
-          isExpanded: expanded,
-        ),
-      ],
-    );
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // FAVORITE CARD FOR SEARCH SCREEN
 
 class FavoriteCard extends StatefulWidget {
@@ -367,7 +796,7 @@ class _FavoriteCardState extends State<FavoriteCard> {
     return ListTile(
       onTap: () {},
       title: Container(
-          margin: EdgeInsets.symmetric(vertical: 20),
+          margin: EdgeInsets.only(top: 20),
           height: 100,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

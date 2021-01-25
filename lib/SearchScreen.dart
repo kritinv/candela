@@ -115,6 +115,7 @@ class _SearchMainState extends State<SearchMain> {
         category: category,
       );
     });
+    Navigator.pop(context);
   }
 
   void toggleSearch() {
@@ -413,6 +414,7 @@ class _MentorCardState extends State<MentorCard> {
           context,
           MaterialPageRoute(
             builder: (context) => ProfilePage(
+              id: widget.id,
               imageURL: widget.imageURL,
               firstName: widget.firstName,
               lastName: widget.lastName,
