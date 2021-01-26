@@ -263,6 +263,10 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
   void cancelTime() async {
     widget.meetingTimes
         .removeWhere((element) => selectedTimeSlots.contains(element));
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.id)
+        .update({'meeting': FieldValue.arrayUnion(selectedTimeSlots)});
 
     if (widget.meetingTimes.isEmpty) {
       await FirebaseFirestore.instance
@@ -300,6 +304,7 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
   //////////////////////////////////////////////////////////////////////////////
 
   List selectedNewTimeSlots = [];
+  List timeSlotsTime = [];
 
   // add appointment
   void addAppointment({context}) {
@@ -322,8 +327,7 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
     print(selectedTimeSlots);
   }
 
-  Future<List<Widget>> downloadMeetings() async {
-    List timeSlotsTime;
+  Future<List> downloadMeetings() async {
     List<Widget> timeSlotsWidget = [];
     await FirebaseFirestore.instance
         .collection('users')
@@ -331,18 +335,24 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
         .get()
         .then((DocumentSnapshot documentSnapshot) {
       if (documentSnapshot.exists) {
+        print(documentSnapshot.data());
         timeSlotsTime = documentSnapshot.data()["meeting"];
       }
     });
-    for (int i = 0; i < timeSlotsTime.length; i += 2) {
-      timeSlotsWidget.add(
-        TimeSlot(
-          timeSlotOne: timeSlotsTime[i],
-          timeSlotTwo:
-              ((i + 1) <= timeSlotsTime.length) ? timeSlotsTime[i + 1] : null,
-          updateSelectedTimeSlots: updateNewSelectedTimeSlots,
-        ),
-      );
+    if (timeSlotsTime.isNotEmpty) {
+      for (int i = 0; i < timeSlotsTime.length; i += 2) {
+        timeSlotsWidget.add(
+          TimeSlot(
+            timeSlotOne: timeSlotsTime[i],
+            timeSlotTwo:
+                ((i + 1) < timeSlotsTime.length && timeSlotsTime.length != 1)
+                    ? timeSlotsTime[i + 1]
+                    : null,
+            updateSelectedTimeSlots: updateSelectedTimeSlots,
+          ),
+        );
+        print(timeSlotsWidget);
+      }
     }
     return timeSlotsWidget;
   }
@@ -430,10 +440,18 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
                                   .collection('user')
                                   .doc(currentUser)
                                   .update({
-                                ('meeting.' + widget.id): selectedNewTimeSlots
+                                ('meeting.' + widget.id):
+                                    FieldValue.arrayUnion(selectedTimeSlots)
                               });
-                              widget.refresh();
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(widget.id)
+                                  .update({
+                                'meeting':
+                                    FieldValue.arrayRemove(selectedTimeSlots)
+                              });
                               OverlayScreen().pop();
+                              Navigator.pushReplacementNamed(context, '/home');
                             },
                           ),
                         ),
@@ -462,37 +480,38 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
                   headerBuilder: (BuildContext context, bool isExpanded) {
                     return ListTile(
                       title: Container(
-                          margin: EdgeInsets.symmetric(vertical: 10),
-                          height: 100,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: <Widget>[
-                              CircleAvatar(
-                                  backgroundImage:
-                                      NetworkImage(widget.imageURL),
-                                  radius: 40),
-                              SizedBox(width: 20),
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    widget.firstName + " " + widget.lastName,
-                                    style: TextStyle(
-                                        fontSize: 20, fontFamily: "OpenSans"),
-                                  ),
-                                  SizedBox(height: 10),
-                                  RatingBar(
-                                      rating: widget.rating, color: color),
-                                  SizedBox(height: 10),
-                                  Text(widget.headline,
-                                      style: TextStyle(
-                                          fontSize: 12, fontFamily: "OpenSans"))
-                                ],
-                              ),
-                            ],
-                          )),
+                        margin: EdgeInsets.symmetric(vertical: 10),
+                        height: 100,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: <Widget>[
+                            CircleAvatar(
+                                backgroundImage: NetworkImage(widget.imageURL),
+                                radius: 40),
+                            SizedBox(width: 20),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  widget.firstName + " " + widget.lastName,
+                                  style: TextStyle(
+                                      fontSize: 20, fontFamily: "OpenSans"),
+                                ),
+                                SizedBox(height: 10),
+                                RatingBar(rating: widget.rating, color: color),
+                                SizedBox(height: 10),
+                                Text(
+                                  widget.headline,
+                                  style: TextStyle(
+                                      fontSize: 12, fontFamily: "OpenSans"),
+                                )
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     );
                   },
                   body: ListTile(
@@ -501,7 +520,9 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
                       children: [
                         GestureDetector(
                           onTap: () {
-                            addAppointment(context: context);
+                            if (timeSlotsTime.length != 0) {
+                              addAppointment(context: context);
+                            }
                           },
                           child: Align(
                             alignment: Alignment.centerLeft,
@@ -511,7 +532,7 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
                               margin: EdgeInsets.only(left: 30),
                               child: Center(
                                 child: Text(
-                                  "Add Appointments",
+                                  "Add Appointments (${timeSlotsTime.length})",
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -524,7 +545,7 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
                             ),
                           ),
                         ),
-                        SizedBox(height: 5),
+                        SizedBox(height: 10),
                         Column(children: timeBoxes),
                         (displayCancel)
                             ? Column(children: [
@@ -533,7 +554,10 @@ class _MentorExpandableCardState extends State<MentorExpandableCard> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       GestureDetector(
-                                        onTap: cancelTime,
+                                        onTap: () {
+                                          timeSlotsTime = [];
+                                          cancelTime();
+                                        },
                                         child: Container(
                                           width: 80,
                                           height: 25,
@@ -590,7 +614,7 @@ class TimeRow extends StatelessWidget {
 
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.only(top: 10, bottom: 10, left: 25),
+      margin: EdgeInsets.only(top: 5, bottom: 5, left: 25),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: <Widget>[
@@ -794,9 +818,25 @@ class _FavoriteCardState extends State<FavoriteCard> {
     }
 
     return ListTile(
-      onTap: () {},
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(
+              id: widget.id,
+              imageURL: widget.imageURL,
+              firstName: widget.firstName,
+              lastName: widget.lastName,
+              headline: widget.headline,
+              ratingBar: RatingBar(rating: widget.rating, color: color),
+              rating: widget.rating,
+              color: color,
+            ),
+          ),
+        );
+      },
       title: Container(
-          margin: EdgeInsets.only(top: 20),
+          margin: EdgeInsets.only(top: 10),
           height: 100,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
