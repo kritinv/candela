@@ -9,14 +9,12 @@ class NavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: _themePrimary,
-      height: 80,
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           NavBarItem(icon: Icons.home, routeName: "/home"),
           NavBarItem(icon: Icons.search, routeName: "/search"),
-          NavBarItem(icon: Icons.notifications, routeName: "/notifications"),
           NavBarItem(icon: Icons.check, routeName: "/completed"),
           NavBarItem(icon: Icons.person, routeName: "/user"),
         ],

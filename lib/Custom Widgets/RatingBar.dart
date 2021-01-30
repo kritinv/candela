@@ -17,7 +17,6 @@ class _RatingBarState extends State<RatingBar> {
   @override
   Widget build(BuildContext context) {
     return LinearPercentIndicator(
-      width: 200.0,
       lineHeight: 10.0,
       percent: widget.rating / 5.0,
       progressColor: widget.color,

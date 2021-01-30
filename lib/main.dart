@@ -1,20 +1,20 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:bq_version/HomeScreen.dart';
+import 'package:bq_version/Home/HomeScreen.dart';
 import 'package:bq_version/SearchScreen.dart';
-import 'NotificationsScreen.dart';
+import 'Completed.dart';
 import 'Registration.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:bq_version/UserProfile.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   runApp(MyApp());
 }
-
-String currentUser = 'lJExmrgxK61D5dV9aPaf';
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,6 +36,10 @@ class _MyAppState extends State<MyApp> {
         )
       ],
       child: MaterialApp(
+        theme: ThemeData(
+          primaryColor: Color(0xFFDC143C),
+          primaryColorLight: Colors.red[300],
+        ),
         home: AuthenticationWrapper(),
         onGenerateRoute: (settings) {
           if (settings.name == "/home")
@@ -43,15 +47,10 @@ class _MyAppState extends State<MyApp> {
           else if (settings.name == "/search")
             return PageRouteBuilder(
                 pageBuilder: (_, __, ___) => SearchScreen());
-          else if (settings.name == "/notifications")
-            return PageRouteBuilder(
-                pageBuilder: (_, __, ___) => NotificationsScreen());
           else if (settings.name == "/completed")
-            return PageRouteBuilder(
-                pageBuilder: (_, __, ___) => SearchScreen());
+            return PageRouteBuilder(pageBuilder: (_, __, ___) => Completed());
           else if (settings.name == "/user")
-            return PageRouteBuilder(
-                pageBuilder: (_, __, ___) => SearchScreen());
+            return PageRouteBuilder(pageBuilder: (_, __, ___) => UserProfile());
           return null;
         },
       ),
@@ -80,7 +79,12 @@ class AuthenticationService {
   Stream<User> get authStateChanges => _firebaseAuth.authStateChanges();
 
   Future<void> signOut() async {
-    await _firebaseAuth.signOut();
+    try {
+      await _firebaseAuth.signOut();
+      return "";
+    } on FirebaseAuthException catch (e) {
+      return e.message;
+    }
   }
 
   Future<String> signIn({String email, String password}) async {
@@ -128,7 +132,26 @@ class AuthenticationService {
       print("New Credential Created");
 
       // Once signed in, return the UserCredential
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      final UserCredential authResult =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      if (authResult.additionalUserInfo.isNewUser) {
+        String name = FirebaseAuth.instance.currentUser.displayName;
+        String photoURL = FirebaseAuth.instance.currentUser.photoURL;
+        await FirebaseFirestore.instance
+            .collection('user')
+            .doc(FirebaseAuth.instance.currentUser.uid)
+            .set({
+          "meeting": {},
+          "favorite": [],
+          "bio": "",
+          "headline": "",
+          "name": name,
+          "photoURL": photoURL,
+          "status": "normal",
+        });
+      }
+      print("Added to user");
       return "";
     } on FirebaseAuthException catch (e) {
       return e.message;

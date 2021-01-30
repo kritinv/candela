@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'Custom Widgets/NavBar.dart';
 import 'Custom Widgets/RatingBar.dart';
-import 'main.dart';
 import 'package:bq_version/ProfilePage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -13,6 +13,8 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
+  String currentUser = FirebaseAuth.instance.currentUser.uid;
+
   Future<List> downloadStarred() async {
     List favorites = [];
     await FirebaseFirestore.instance
@@ -340,6 +342,7 @@ class SearchBody extends StatelessWidget {
                       id: document.id,
                       starred: starred,
                       updateStarred: updateStarred,
+                      bio: document.data()['bio'],
                     ),
                   );
                 }
@@ -364,6 +367,7 @@ class MentorCard extends StatefulWidget {
   final String id;
   final bool starred;
   final Function updateStarred;
+  final String bio;
   const MentorCard(
       {this.imageURL,
       this.firstName,
@@ -372,13 +376,16 @@ class MentorCard extends StatefulWidget {
       this.headline,
       this.id,
       this.starred,
-      this.updateStarred});
+      this.updateStarred,
+      this.bio});
 
   @override
   _MentorCardState createState() => _MentorCardState();
 }
 
 class _MentorCardState extends State<MentorCard> {
+  String currentUser = FirebaseAuth.instance.currentUser.uid;
+
   Icon starBorder = Icon(Icons.star_border, color: Colors.grey[300]);
   Icon starNoBorder = Icon(Icons.star, color: Colors.yellow[300]);
   Icon icon;
@@ -422,12 +429,13 @@ class _MentorCardState extends State<MentorCard> {
               ratingBar: RatingBar(rating: widget.rating, color: color),
               rating: widget.rating,
               color: color,
+              bio: widget.bio,
             ),
           ),
         );
       },
       title: Container(
-          margin: EdgeInsets.symmetric(vertical: 20),
+          margin: EdgeInsets.symmetric(vertical: 20, horizontal: 20),
           height: 100,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -436,25 +444,29 @@ class _MentorCardState extends State<MentorCard> {
               CircleAvatar(
                   backgroundImage: NetworkImage(widget.imageURL), radius: 40),
               SizedBox(width: 20),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    widget.firstName + " " + widget.lastName,
-                    style: TextStyle(fontSize: 20, fontFamily: "OpenSans"),
-                  ),
-                  SizedBox(height: 10),
-                  RatingBar(rating: widget.rating, color: color),
-                  SizedBox(height: 10),
-                  Text(widget.headline,
-                      style: TextStyle(fontSize: 12, fontFamily: "OpenSans"))
-                ],
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Text(
+                      widget.firstName + " " + widget.lastName,
+                      style: TextStyle(fontSize: 20, fontFamily: "OpenSans"),
+                      textAlign: TextAlign.center,
+                    ),
+                    RatingBar(rating: widget.rating, color: color),
+                    Text(
+                      widget.headline,
+                      style: TextStyle(fontSize: 12, fontFamily: "OpenSans"),
+                      textAlign: TextAlign.center,
+                    )
+                  ],
+                ),
               ),
               SizedBox(width: 10),
               GestureDetector(
                   child: icon,
                   onTap: () async {
+                    print(currentUser);
                     if (icon == starNoBorder) {
                       await FirebaseFirestore.instance
                           .collection('user')

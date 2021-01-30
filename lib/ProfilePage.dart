@@ -3,7 +3,7 @@ import 'Custom Widgets/NavBar.dart';
 import 'Custom Widgets/RatingBar.dart';
 import 'package:overlay_screen/overlay_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'main.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ProfilePage extends StatefulWidget {
   final String imageURL;
@@ -14,6 +14,7 @@ class ProfilePage extends StatefulWidget {
   final double rating;
   final Color color;
   final String id;
+  final String bio;
 
   ProfilePage(
       {@required this.imageURL,
@@ -23,7 +24,8 @@ class ProfilePage extends StatefulWidget {
       @required this.ratingBar,
       @required this.rating,
       @required this.color,
-      @required this.id});
+      @required this.id,
+      @required this.bio});
 
   static const Color _themePrimary = Color(0xFFDC143C);
   static const Color _themeLight = Colors.white;
@@ -36,6 +38,7 @@ class _ProfilePageState extends State<ProfilePage> {
   List selectedTimeSlots = [];
   List timeSlotsTime;
   bool unavailableMessage = false;
+  String currentUser = FirebaseAuth.instance.currentUser.uid;
 
   void refresh() {
     setState(() {});
@@ -75,7 +78,6 @@ class _ProfilePageState extends State<ProfilePage> {
         timeSlotsTime = documentSnapshot.data()["meeting"];
       }
     });
-    print('1asdfasdfasd');
     print(timeSlotsTime);
     if (timeSlotsTime.isNotEmpty) {
       for (int i = 0; i < timeSlotsTime.length; i += 2) {
@@ -155,6 +157,15 @@ class _ProfilePageState extends State<ProfilePage> {
                               'meeting':
                                   FieldValue.arrayRemove(selectedTimeSlots)
                             });
+
+                            await FirebaseFirestore.instance
+                                .collection('user')
+                                .doc(widget.id)
+                                .update({
+                              ('meeting_mentee.' + currentUser):
+                                  FieldValue.arrayUnion(selectedTimeSlots)
+                            });
+
                             OverlayScreen().pop();
                             Navigator.pushReplacementNamed(context, '/home');
                           },
@@ -178,101 +189,110 @@ class _ProfilePageState extends State<ProfilePage> {
               children: <Widget>[
                 Expanded(
                   child: Container(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: <Widget>[
-                        SizedBox(height: 40),
-                        CircleAvatar(
-                          backgroundImage: NetworkImage(widget.imageURL),
-                          radius: 80,
-                        ),
-                        SizedBox(height: 15),
-                        Text(
-                          "@username",
-                          style: TextStyle(
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                        SizedBox(height: 15),
-                        Text(widget.firstName + " " + widget.lastName,
-                            style: TextStyle(fontSize: 25)),
-                        SizedBox(height: 10),
-                        Text(
-                          widget.headline,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                        SizedBox(height: 15),
-                        Container(
-                          margin: EdgeInsets.symmetric(horizontal: 50),
-                          child: Text(
-                              "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis lacinia volutpat urna, non aliquam mi dictum vel. Vestibulum pretium id lacus at lobortis.",
-                              style: TextStyle(fontSize: 15),
-                              textAlign: TextAlign.left),
-                        ),
-                        SizedBox(height: 30),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                    child: ListView(
+                      children: [
+                        SizedBox(height: 20),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: <Widget>[
-                            Text(
-                              "Rating:",
-                              style: TextStyle(fontSize: 20),
-                            ),
-                            SizedBox(width: 5),
-                            widget.ratingBar,
-                            SizedBox(width: 5),
+                            SizedBox(height: 40),
                             CircleAvatar(
-                              backgroundColor: widget.color,
-                              radius: 30,
-                              child: CircleAvatar(
-                                radius: 25,
-                                backgroundColor: Colors.white,
-                                child: Text(
-                                  widget.rating.toString(),
-                                  style: TextStyle(color: Colors.black),
-                                ),
+                              backgroundImage: NetworkImage(widget.imageURL),
+                              radius: 80,
+                            ),
+                            SizedBox(height: 15),
+                            Text(
+                              "@username",
+                              style: TextStyle(
+                                color: Colors.grey[700],
                               ),
                             ),
+                            SizedBox(height: 15),
+                            Text(widget.firstName + " " + widget.lastName,
+                                style: TextStyle(fontSize: 25)),
+                            SizedBox(height: 10),
+                            Text(
+                              widget.headline,
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            SizedBox(height: 15),
+                            Container(
+                              margin: EdgeInsets.symmetric(horizontal: 50),
+                              child: Text(
+                                  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis lacinia volutpat urna, non aliquam mi dictum vel. Vestibulum pretium id lacus at lobortis.",
+                                  style: TextStyle(fontSize: 15),
+                                  textAlign: TextAlign.left),
+                            ),
+                            SizedBox(height: 30),
+                            Container(
+                              margin: EdgeInsets.symmetric(horizontal: 20),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Text(
+                                    "Rating:",
+                                    style: TextStyle(fontSize: 20),
+                                  ),
+                                  SizedBox(width: 5),
+                                  Expanded(child: widget.ratingBar),
+                                  SizedBox(width: 5),
+                                  CircleAvatar(
+                                    backgroundColor: widget.color,
+                                    radius: 30,
+                                    child: CircleAvatar(
+                                      radius: 25,
+                                      backgroundColor: Colors.white,
+                                      child: Text(
+                                        widget.rating.toString(),
+                                        style: TextStyle(color: Colors.black),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(height: 30),
+                            FlatButton(
+                              onPressed: () {
+                                if (timeSlotsTime.length == 0) {
+                                  showUnavailable();
+                                } else {
+                                  OverlayScreen().show(
+                                    context,
+                                    identifier: "TimeSlots",
+                                  );
+                                }
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                height: 40,
+                                margin: EdgeInsets.symmetric(horizontal: 50),
+                                child: Center(
+                                  child: Text(
+                                    "Meetings (${timeSlotsTime.length})",
+                                    style: TextStyle(
+                                        color: ProfilePage._themeLight),
+                                  ),
+                                ),
+                                color: ProfilePage._themePrimary,
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            (unavailableMessage)
+                                ? Text(
+                                    'No Available Timeslots',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFDC143C),
+                                    ),
+                                  )
+                                : Container(width: 0, height: 0),
+                            SizedBox(height: 20),
                           ],
                         ),
-                        SizedBox(height: 30),
-                        FlatButton(
-                          onPressed: () {
-                            if (timeSlotsTime.length == 0) {
-                              showUnavailable();
-                            } else {
-                              OverlayScreen().show(
-                                context,
-                                identifier: "TimeSlots",
-                              );
-                            }
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            height: 40,
-                            margin: EdgeInsets.symmetric(horizontal: 50),
-                            child: Center(
-                              child: Text(
-                                "Meetings (${timeSlotsTime.length})",
-                                style:
-                                    TextStyle(color: ProfilePage._themeLight),
-                              ),
-                            ),
-                            color: ProfilePage._themePrimary,
-                          ),
-                        ),
-                        SizedBox(height: 10),
-                        (unavailableMessage)
-                            ? Text(
-                                'No Available Timeslots',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFFDC143C),
-                                ),
-                              )
-                            : Container(width: 0, height: 0),
                       ],
                     ),
                   ),
